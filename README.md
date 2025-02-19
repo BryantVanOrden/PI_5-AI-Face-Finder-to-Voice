@@ -64,13 +64,6 @@ Run the python application:
 
  * VI UI and tetts-to-speech finally be saved in the captured_faces directory. 
 
-3# Running the Application
-
-Run the python application:
-
-    past main.py
-
-
 
 ## How It Works
 
