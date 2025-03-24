@@ -19,7 +19,7 @@ APITOKEN = 'YOUR_API_TOKEN'  # Replace with your actual API token
 # We now use the landmark model from the patlevin repo.
 MODEL_FILENAME = "face_landmark.tflite"
 # This URL should point to the raw model file. Update if necessary.
-MODEL_URL = "https://github.com/patlevin/face-detection-tflite/raw/master/models/face_landmark.tflite"
+MODEL_URL = "https://github.com/shaqian/tflite-models/raw/master/face_detection/face_detection_short_range.tflite"
 
 def download_model_if_needed(model_path, model_url):
     if not os.path.exists(model_path):
@@ -41,9 +41,12 @@ download_model_if_needed(MODEL_FILENAME, MODEL_URL)
 
 # Try to import tflite_runtime; fall back to TensorFlow Lite Interpreter if needed.
 try:
-    import tflite_runtime.interpreter as tflite
+    from tflite_runtime.interpreter import Interpreter, load_delegate
+    print("✅ Using tflite_runtime.")
 except ImportError:
-    from tensorflow.lite.python.interpreter import Interpreter as tflite
+    from tensorflow.lite.python.interpreter import Interpreter
+    load_delegate = None  # Fallback: no delegate loading with TensorFlow
+    print("✅ Using TensorFlow Lite fallback.")
 
 # Global variables for tracking captured faces.
 captured_face_ids = set()
@@ -63,18 +66,27 @@ def speak(text):
     engine.runAndWait()
 
 def load_interpreter(model_path):
-    """Load the TFLite model and attempt to use the Edge TPU delegate if available."""
+    """Load the TFLite model. Skip Edge TPU if not available."""
     try:
-        interpreter = tflite.Interpreter(
-            model_path=model_path,
-            experimental_delegates=[tflite.load_delegate('libedgetpu.so.1')]
-        )
-        print("Using Edge TPU delegate.")
+        # Only try delegate if explicitly wanted and available
+        if load_delegate:
+            try:
+                interpreter = Interpreter(
+                    model_path=model_path,
+                    experimental_delegates=[load_delegate('libedgetpu.so.1')]
+                )
+                print("✅ Using Edge TPU delegate.")
+            except OSError:
+                print("⚠️ Edge TPU not available, using CPU.")
+                interpreter = Interpreter(model_path=model_path)
+        else:
+            interpreter = Interpreter(model_path=model_path)
     except Exception as e:
-        print("Edge TPU delegate not available, falling back to CPU. Error:", e)
-        interpreter = tflite.Interpreter(model_path=model_path)
+        print("❌ Failed to load model:", e)
+        raise e
     interpreter.allocate_tensors()
     return interpreter
+
 
 def detect_faces(interpreter, frame):
     """
